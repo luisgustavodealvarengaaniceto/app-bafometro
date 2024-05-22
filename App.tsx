@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Button, Text, FlatList, StyleSheet  } from 'react-native';
-import RNBluetoothClassic, { BluetoothDevice, BluetoothEventSubscription  } from 'react-native-bluetooth-classic';
+import { View, Button, StyleSheet } from 'react-native';
+import RNBluetoothClassic, { BluetoothDevice, BluetoothEventSubscription } from 'react-native-bluetooth-classic';
+import BluetoothDeviceList from './components/BluetoothDeviceList';
+import BluetoothConnection from './components/BluetoothConnection';
+import BluetoothData from './components/BluetoothData';
 
 const BluetoothComponent = () => {
   const [devices, setDevices] = useState<BluetoothDevice[]>([]);
@@ -8,9 +11,7 @@ const BluetoothComponent = () => {
   const [receivedData, setReceivedData] = useState<string>('');
   const [subscription, setSubscription] = useState<BluetoothEventSubscription | null>(null);
 
-
   useEffect(() => {
-    // Ativar Bluetooth ao inicializar o componente
     const enableBluetooth = async () => {
       try {
         const enabled = await RNBluetoothClassic.isBluetoothEnabled();
@@ -25,7 +26,6 @@ const BluetoothComponent = () => {
     enableBluetooth();
   }, []);
 
-  // Função para listar dispositivos pareados
   const listPairedDevices = async () => {
     try {
       const pairedDevices = await RNBluetoothClassic.getBondedDevices();
@@ -35,12 +35,10 @@ const BluetoothComponent = () => {
     }
   };
 
-  // Função para conectar a um dispositivo
   const connectToDevice = async (device: BluetoothDevice) => {
     try {
       const connection = await RNBluetoothClassic.connectToDevice(device.id);
       setConnectedDevice(connection);
-      // Iniciar a leitura dos dados recebidos
       const readSubscription = connection.onDataReceived((event) => {
         setReceivedData((prevData) => prevData + event.data);
       });
@@ -50,29 +48,27 @@ const BluetoothComponent = () => {
     }
   };
 
-  return (
-    <View>
-      <Button title="Listar Dispositivos Pareados" onPress={listPairedDevices} />
-      {devices.length > 0 && (
-        <FlatList
-          data={devices}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View>
-              <Text>{item.name}</Text>
-              <Button title="Conectar" onPress={() => connectToDevice(item)} />
-            </View>
-          )}
-        />
-      )}
-      {connectedDevice && (
-        <Text>Conectado a: {connectedDevice.name}</Text>
-      )}
+  const disconnectFromDevice = async () => {
+    if (connectedDevice) {
+      try {
+        await connectedDevice.disconnect();
+        setConnectedDevice(null);
+        if (subscription) {
+          subscription.remove();
+          setSubscription(null);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  };
 
-      <View style={styles.dataContainer}>
-        <Text>Dados Recebidos:</Text>
-        <Text>{receivedData}</Text>
-      </View>
+  return (
+    <View style={styles.container}>
+      <Button title="Listar Dispositivos Pareados" onPress={listPairedDevices} />
+      <BluetoothDeviceList devices={devices} onConnect={connectToDevice} />
+      <BluetoothConnection device={connectedDevice} onDisconnect={disconnectFromDevice} />
+      <BluetoothData data={receivedData} />
     </View>
   );
 };
@@ -82,27 +78,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#f5f5f5',
-  },
-  deviceContainer: {
-    marginVertical: 8,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 4,
-    elevation: 2,
-  },
-  connectionContainer: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 4,
-    elevation: 2,
-  },
-  dataContainer: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: '#fff',
-    borderRadius: 4,
-    elevation: 2,
   },
 });
 
