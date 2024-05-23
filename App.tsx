@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Button, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, DeviceEventEmitter } from 'react-native';
 import RNBluetoothClassic, { BluetoothDevice, BluetoothEventSubscription } from 'react-native-bluetooth-classic';
-import BluetoothDeviceList from './components/BluetoothDeviceList';
-import BluetoothConnection from './components/BluetoothConnection';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import BluetoothData from './components/BluetoothData';
 
 const BluetoothComponent = () => {
-  const [devices, setDevices] = useState<BluetoothDevice[]>([]);
   const [connectedDevice, setConnectedDevice] = useState<BluetoothDevice | null>(null);
   const [receivedData, setReceivedData] = useState<string>('');
   const [subscription, setSubscription] = useState<BluetoothEventSubscription | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     const enableBluetooth = async () => {
@@ -19,55 +18,82 @@ const BluetoothComponent = () => {
           await RNBluetoothClassic.requestBluetoothEnabled();
         }
       } catch (error) {
-        console.error(error);
+        console.error('Erro ao habilitar Bluetooth:', error);
       }
     };
 
-    enableBluetooth();
-  }, []);
-
-  const listPairedDevices = async () => {
-    try {
-      const pairedDevices = await RNBluetoothClassic.getBondedDevices();
-      setDevices(pairedDevices);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const connectToDevice = async (device: BluetoothDevice) => {
-    try {
-      const connection = await RNBluetoothClassic.connectToDevice(device.id);
-      setConnectedDevice(connection);
-      const readSubscription = connection.onDataReceived((event) => {
-        setReceivedData((prevData) => prevData + event.data);
-      });
-      setSubscription(readSubscription);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const disconnectFromDevice = async () => {
-    if (connectedDevice) {
+    const checkPermissions = async () => {
       try {
-        await connectedDevice.disconnect();
-        setConnectedDevice(null);
-        if (subscription) {
-          subscription.remove();
-          setSubscription(null);
+        const permission = await check(PERMISSIONS.ANDROID.BLUETOOTH_CONNECT);
+        if (permission !== RESULTS.GRANTED) {
+          await request(PERMISSIONS.ANDROID.BLUETOOTH_CONNECT);
         }
       } catch (error) {
-        console.error(error);
+        console.error('Erro ao verificar permissões:', error);
       }
-    }
-  };
+    };
+
+    const getBondedDevicesAndConnect = async () => {
+      if (isConnecting || connectedDevice) return;
+      setIsConnecting(true);
+
+      try {
+        console.log('Tentando conectar ao dispotivo emparelhado');
+        const bondedDevices = await RNBluetoothClassic.getBondedDevices();
+        for (const device of bondedDevices) {
+          try {
+            const connection = await RNBluetoothClassic.connectToDevice(device.id);
+            if (connection) {
+              setConnectedDevice(device);
+              startDataSubscription(device);
+              break;
+            }
+          } catch (error) {
+            console.log(`Erro ao conectar ao dispositivo ${device.name}:`, error);
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao obter dispositivos emparelhados:', error);
+      } finally {
+        setIsConnecting(false);
+      }
+    };
+
+    const startDataSubscription = (device: BluetoothDevice) => {
+      const subscription = device.onDataReceived((event) => {
+        setReceivedData((prevData) => prevData + event.data);
+      });
+      setSubscription(subscription);
+    };
+
+    const handleDeviceConnected = (device: BluetoothDevice) => {
+      console.log('Dispositivo conectado:', device);
+      setConnectedDevice(device);
+      startDataSubscription(device);
+    };
+
+    enableBluetooth();
+    checkPermissions();
+    getBondedDevicesAndConnect();
+
+    const subscription = DeviceEventEmitter.addListener('BluetoothDeviceConnected', handleDeviceConnected);
+
+    return () => {
+      subscription.remove();
+      if (subscription) {
+        subscription.remove();
+        setSubscription(null);
+      }
+    };
+  }, [connectedDevice, isConnecting]);
 
   return (
     <View style={styles.container}>
-      <Button title="Listar Dispositivos Pareados" onPress={listPairedDevices} />
-      <BluetoothDeviceList devices={devices} onConnect={connectToDevice} />
-      <BluetoothConnection device={connectedDevice} onDisconnect={disconnectFromDevice} />
+      {connectedDevice ? (
+        <Text>Conectado ao dispositivo: {connectedDevice.name}</Text>
+      ) : (
+        <Text>Nenhum dispositivo conectado</Text>
+      )}
       <BluetoothData data={receivedData} />
     </View>
   );
