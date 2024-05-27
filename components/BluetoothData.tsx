@@ -1,23 +1,27 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import axios from 'axios';
 
 interface BluetoothDataProps {
-  data: string | null;  // Permitir que data seja null inicialmente
+  data: string | null;
 }
 
 const BluetoothData: React.FC<BluetoothDataProps> = ({ data }) => {
+  const lastSentData = useRef<string | null>(null);
+
   useEffect(() => {
     const enviarDados = async () => {
-      if (data) {  // Verificar se data não é vazio
+      if (data) {
         try {
-          const response = await axios.post('https://af82-2804-431-c7dd-884f-dd4f-c74e-dccc-ce77.ngrok-free.app/dados', data, {
+          console.log('Enviando dados:', data);
+          const response = await axios.post('https://bcc0-2804-431-c7dc-81e6-f139-5130-19f2-53eb.ngrok-free.app/dados', data, {
             headers: {
               'Content-Type': 'text/plain',
             },
           });
           console.log('Sucesso', 'Dados enviados com sucesso!');
           console.log('Resposta da API:', response.data);
+          lastSentData.current = data;
         } catch (error) {
           console.log('Erro', 'Falha ao enviar dados');
           console.error('Erro ao enviar dados:', error);
@@ -26,7 +30,7 @@ const BluetoothData: React.FC<BluetoothDataProps> = ({ data }) => {
     };
 
     enviarDados();
-  }, [data]); // Chama o efeito sempre que 'data' mudar
+  }, [data]);
 
   return (
     <View style={styles.dataContainer}>
